@@ -1892,7 +1892,7 @@ function renderApp() {
       <a class="topbar-btn" id="music-home-btn" href="/" target="tutooth-home" title="回主页" aria-label="回主页">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
       </a>
-      <!-- Header title. -->
+      ${'' /* Header title. */}
       <div class="topbar-title">music</div>
       <button class="topbar-btn" id="music-mini-btn" type="button" title="缩成迷你播放器" aria-label="缩成迷你播放器">
         <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5M16 21h5v-5M3 3l6 6M21 21l-6-6"/></svg>
@@ -2485,7 +2485,7 @@ function buildDiscoverHTML() {
         <button class="search-go" id="search-go">Go</button>
       </div>
     </div>
-    <!-- Roam pill retired (engine fallback kept in code). -->
+    ${'' /* Roam pill retired (engine fallback kept in code). */}
     <div id="search-results"></div>`;
 
   // Daily picks (show when no search results)
@@ -2864,7 +2864,7 @@ function renderLyricsView() {
         <button class="ly-mem-btn" id="ly-mv-btn" aria-label="看MV"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2.5"/><polygon points="10,9 16,12 10,15" fill="currentColor" stroke="none"/></svg></button>
         <button class="ly-mem-btn" id="ly-addlist-btn" aria-label="加入歌单"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h13M3 12h13M3 18h7"/><path d="M18 15v6M15 18h6"/></svg></button>      </div>` : ''}
     </div>
-    <!-- Glass hero card replaces the old spinning vinyl. -->
+    ${'' /* Glass hero card replaces the old spinning vinyl. */}
          syncDiscSpin 还在但查无此盘,自然空转;想复活唱片去 git 捞 8-10 的版本。 -->
     <div class="ly-cover-area">
       <div class="ly-card">
@@ -2879,8 +2879,8 @@ function renderLyricsView() {
     <div class="ly-lines" id="ly-lines-container">
       <div class="ly-loading">loading lyrics...</div>
     </div>
-    <!-- In-player line chat (flow inspired by Cheiineeey/netease-music-mcp):
-         长按选句后这条小输入浮上来,想说的话就地写,寄出去不用离开歌词页 -->
+    ${'' /* In-player line chat (flow inspired by Cheiineeey/netease-music-mcp):
+         长按选句后这条小输入浮上来,想说的话就地写,寄出去不用离开歌词页 */}
     <div class="ly-chatline" id="ly-chatline" hidden>
       <div class="ly-chatline-quote" id="ly-chatline-quote"></div>
       <div class="ly-chatline-row">
@@ -2889,7 +2889,7 @@ function renderLyricsView() {
         <button class="ly-chatline-close" id="ly-chatline-close" aria-label="收起">✕</button>
       </div>
     </div>
-    <!-- Compact one-row control deck. -->
+    ${'' /* Compact one-row control deck. */}
          进度条滑块是兔兔本兔——歌走到哪它站到哪,拖歌等于拽兔子跑 -->
     <div class="ly-deck">
       <button class="ly-skip-btn" id="ly-prev"><svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 6h2v12H6zm12 0v12l-8.5-6z" fill="currentColor"/></svg></button>
