@@ -21,9 +21,7 @@
   --butter: #ffedc2;
   --accent: #984e68;                        /* 文字强调:深玫瑰,浅底上对比够(文字继续用它,别拿去刷按钮) */
   --accent-soft: #c2708a;                   /* 次级强调:玫瑰 */
-  --btn: #D26E88;                           /* unified solid-button color */
-                                               当场考试:「全站哪里用了播放键这个颜色」——答案是没有,
-                                               #984e68 当按钮是音乐页黑户,全站正牌是这个) */
+  --btn: #D26E88;                           /* unified solid-button color (the only solid-button color site-wide) */
   --accent-tint: rgba(194, 112, 138, 0.14);
   --good: #4d9b7b;
   --bad: #d96a5e;
@@ -820,9 +818,9 @@ body.window-mini .np-eyebrow { display: none; }
    这两个走合成器，不碰布局。所以字号固定，大小差交给 scale。
    字重也不再跳（600↔500 会改变文字宽度 → 长句重新换行 → 整列抖），
    层次改由 opacity + 颜色 + 缩放三样一起给。 */
-/* Centered lyrics layout. */
-   居中后 transform-origin 必须跟着改成 center —— 还留 left center 的话，
-   放大时整行会往右甩，看着像在抖。 */
+/* Centered lyrics layout.
+   With centered text the transform-origin must be center too — keeping
+   `left center` makes the active line lurch sideways when it scales up. */
 .ly-line {
   padding: 7px 0; font-size: 15px; font-weight: 500;
   color: var(--ink); opacity: 0.3;
