@@ -3632,6 +3632,16 @@ audio.addEventListener('seeked', () => beatNow());     // 9-03: report right aft
 audio.addEventListener('play', () => beatNow());   // foreground: timer; background: driven by timeupdate
 
 // ── Init ──
+
+// ── Parent postMessage control (dynamic island) ──
+window.addEventListener('message', (e) => {
+  if (!e.data || typeof e.data !== 'object') return;
+  const cmd = e.data.musicCmd;
+  if (cmd === 'togglePlay') togglePlay();
+  else if (cmd === 'playNext') playNext();
+  else if (cmd === 'playPrev') playPrev();
+});
+
 setupMediaSession();
 loadLikedIds();   // load the liked-song ledger at boot (local + NetEase account merged)
 init();
