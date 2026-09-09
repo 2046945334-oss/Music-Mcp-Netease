@@ -1863,7 +1863,12 @@ let playlistDetail = null; // playlist meta object or null
 
 // ── Re-render on audio change ──
 let npBarEl = null;
-onAudioChange(() => { renderNpBar(); renderLyricsProgress(); });
+let _lyricThrottleT = 0;
+onAudioChange(() => {
+  renderNpBar();
+  const now = performance.now();
+  if (now - _lyricThrottleT > 250) { _lyricThrottleT = now; renderLyricsProgress(); }
+});
 onSongChange(() => { renderNpBar(); loadLyrics(); });
 
 // ── Initial render ──
@@ -3161,9 +3166,10 @@ function syncDiscSpin() {
 function renderLyricsProgress() {
   if (!lyricsOpen) return;
 
-  // Update play button
+  // Update play button (skip if state unchanged)
   const playBtn = document.getElementById('ly-play');
-  if (playBtn) {
+  if (playBtn && playBtn.dataset.pl !== String(state.playing)) {
+    playBtn.dataset.pl = String(state.playing);
     playBtn.innerHTML = state.playing
       ? '<svg viewBox="0 0 24 24" width="17" height="17"><rect x="5" y="3" width="5" height="18" rx="1" fill="currentColor"/><rect x="14" y="3" width="5" height="18" rx="1" fill="currentColor"/></svg>'
       : '<svg viewBox="0 0 24 24" width="17" height="17"><polygon points="5,2 22,12 5,22" fill="currentColor"/></svg>';
@@ -3604,7 +3610,7 @@ async function pollRemote() {
     renderNpBar(); renderQueue();
   } catch {}
 }
-setInterval(() => { if (!document.hidden) pollRemote(); }, 1000);   // foreground 1s: card clicks should feel instant   // foreground: timer; background: driven by timeupdate
+setInterval(() => { if (!document.hidden) pollRemote(); }, 5000);   // foreground 5s: reduced from 1s to avoid competing with audio streaming
 
 // ── Now-playing heartbeat ──
 //    Report playback state every 5s (kept in server memory); the MCP Apps card
