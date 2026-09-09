@@ -1856,7 +1856,7 @@ function coverBox(url, cls) {
 // ══════════════════════════════════════════
 
 // 抽屉里没有 Home tab，落地就落在「播放列表」；独立窗照旧从个人主页开始。
-let currentTab = isEmbedded ? 'playlists' : 'home';
+let currentTab = 'home';
 let lyricsOpen = false;
 let memoryOpen = false;
 let playlistDetail = null; // playlist meta object or null
@@ -1885,7 +1885,7 @@ function renderApp() {
   /* 抽屉里整条顶栏不生成（不是 display:none —— 干脆不渲染，省 52px 也省三个废按钮）。
      顺带 Home 那个 tab 也不给：个人主页、签名都是「逛」的功能，
         Drawer mode hides the profile page: the drawer is for listening. */
-  const topbarHTML = isEmbedded ? '' : `
+  const topbarHTML = `
     <div class="topbar">
       <a class="topbar-btn" id="music-home-btn" href="/" target="tutooth-home" title="回主页" aria-label="回主页">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
@@ -1897,7 +1897,7 @@ function renderApp() {
       </button>
     </div>`;
 
-  const homeNavHTML = isEmbedded ? '' : `
+  const homeNavHTML = `
       <button class="nav-item${currentTab === 'home' ? ' active' : ''}" data-tab="home">
         <svg viewBox="0 0 24 24" width="20" height="20"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         <span>Home</span>
