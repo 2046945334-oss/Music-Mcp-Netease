@@ -1744,10 +1744,10 @@ class MusicHandler(BaseHTTPRequestHandler):
             self._send_json(200, {"ok": True, "pending": 0, "songs": []})
 
     def _handle_music_remote_post(self, body: dict):
-        song = body.get("song")
-        if not song:
-            self._send_json(400, {"error": "missing song"})
-            return
+        """Accept either a song object or a control command.
+        Song: {"song": {...}} or {"song_id": "123"}
+        Control: {"action": "pause|resume|next|prev|play", "song_id": "..."}
+        """
         f = self.state.data_dir / "music_remote.json"
         f.parent.mkdir(parents=True, exist_ok=True)
         queue = []
@@ -1757,6 +1757,26 @@ class MusicHandler(BaseHTTPRequestHandler):
                 queue = old if isinstance(old, list) else [old]
             except Exception:
                 queue = []
+        
+        action = body.get("action")
+        if action in ("pause", "resume", "next", "prev"):
+            # Push control command
+            queue.append({"_control": action})
+            f.write_text(json.dumps(queue[-20:], ensure_ascii=False))
+            self._send_json(200, {"ok": True, "action": action})
+            return
+        
+        if action == "play" and body.get("song_id"):
+            # Push a play-by-id command
+            queue.append({"songId": body["song_id"], "name": "", "artist": "", "mode": "now"})
+            f.write_text(json.dumps(queue[-20:], ensure_ascii=False))
+            self._send_json(200, {"ok": True, "action": "play", "song_id": body["song_id"]})
+            return
+        
+        song = body.get("song")
+        if not song:
+            self._send_json(400, {"error": "missing song or action"})
+            return
         queue.append(song)
         f.write_text(json.dumps(queue[-20:], ensure_ascii=False))
         self._send_json(200, {"ok": True, "queued": len(queue)})

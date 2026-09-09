@@ -3589,6 +3589,14 @@ async function pollRemote() {
     const d = await api('/music/remote');
     if (!d.ok || !d.songs) return;
     for (const raw of d.songs) {
+      // Handle control commands
+      if (raw._control) {
+        if (raw._control === 'pause') audio.pause();
+        else if (raw._control === 'resume') audio.play().catch(() => {});
+        else if (raw._control === 'next') playNext();
+        else if (raw._control === 'prev') playPrev();
+        continue;
+      }
       const song = { name: raw.name || '', artist: raw.artist || '', album: raw.album || '',
                      cover: raw.cover || '', songId: raw.songId || raw.id };
       if (!song.songId) continue;
