@@ -443,6 +443,8 @@ class MusicHandler(BaseHTTPRequestHandler):
             self._handle_music_remote_peek()
         elif path == "/music/now":
             self._handle_music_now_get()
+        elif path == "/music/together-minutes":
+            self._handle_together_minutes_get()
         elif path == "/music/analyze/status":
             self._handle_analyze_status()
         else:
@@ -1674,14 +1676,28 @@ class MusicHandler(BaseHTTPRequestHandler):
     #    progress bar and live lyric highlighting.
 
     def _handle_music_now_post(self, body: dict):
+        now = time.time()
+        playing = bool(body.get("playing"))
+        # Accumulate "together minutes" when actively playing
+        prev = getattr(self.state, "now_playing", None)
+        if playing and prev and prev.get("playing") and prev.get("at"):
+            delta = now - prev["at"]
+            if 0 < delta < 30:  # sane range (heartbeat is ~5s)
+                self.state.together_seconds = getattr(self.state, "together_seconds", 0) + delta
+                # Persist every 60s to avoid losing data on crash
+                if not hasattr(self.state, "_together_last_save"):
+                    self.state._together_last_save = 0
+                if now - self.state._together_last_save > 60:
+                    self._save_together_minutes()
+                    self.state._together_last_save = now
         self.state.now_playing = {
             "songId": str(body.get("songId") or ""),
             "name": body.get("name") or "",
             "artist": body.get("artist") or "",
             "position": float(body.get("position") or 0),
             "duration": float(body.get("duration") or 0),
-            "playing": bool(body.get("playing")),
-            "at": time.time(),
+            "playing": playing,
+            "at": now,
         }
         self._send_json(200, {"ok": True})
 
@@ -1690,7 +1706,20 @@ class MusicHandler(BaseHTTPRequestHandler):
         if not now or time.time() - now.get("at", 0) > 30:
             self._send_json(200, {"ok": False})
             return
-        self._send_json(200, dict(now, ok=True, age=round(time.time() - now.get("at", 0), 1)))
+        mins = round(getattr(self.state, "together_seconds", 0) / 60)
+        self._send_json(200, dict(now, ok=True, age=round(time.time() - now.get("at", 0), 1), togetherMinutes=mins))
+
+    def _save_together_minutes(self):
+        data = self._load_music_data()
+        data.setdefault("profile", {})["togetherMinutes"] = round(getattr(self.state, "together_seconds", 0) / 60)
+        self._save_music_data(data)
+
+    def _handle_together_minutes_get(self):
+        data = self._load_music_data()
+        mins = data.get("profile", {}).get("togetherMinutes", 0)
+        # Also include live accumulation
+        live = round(getattr(self.state, "together_seconds", 0) / 60)
+        self._send_json(200, {"ok": True, "minutes": max(mins, live)})
 
     def _handle_music_remote_get(self):
         # 8-31 升级成小队列:上游是单曲文件、后到覆盖先到;现在攒成列表一次全交,
@@ -1831,6 +1860,12 @@ class ServerState:
         self.data_dir = HERE / "data"
         self.data_dir.mkdir(parents=True, exist_ok=True)
         (self.data_dir / "music_cache").mkdir(parents=True, exist_ok=True)
+        # Restore accumulated together-listen seconds from disk
+        try:
+            _d = json.loads((self.data_dir / "music_data.json").read_text())
+            self.together_seconds = _d.get("profile", {}).get("togetherMinutes", 0) * 60
+        except Exception:
+            self.together_seconds = 0
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
