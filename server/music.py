@@ -64,6 +64,10 @@ logger = logging.getLogger("music")
 # ── Secret management ────────────────────────────────────────────────────────
 
 def _load_or_create_secret() -> str:
+    env_token = os.environ.get("MUSIC_TOKEN", "").strip()
+    if env_token:
+        logger.info("Using MUSIC_TOKEN from environment")
+        return env_token
     secret_file = HERE / ".secret"
     try:
         if secret_file.exists():
