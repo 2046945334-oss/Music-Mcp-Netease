@@ -214,6 +214,10 @@ class MusicHandler(BaseHTTPRequestHandler):
                     return f"MUSIC_U={line.split('=', 1)[1].strip()}"
         except OSError:
             pass
+        # Fallback: read from environment variable
+        env_val = os.environ.get("MUSIC_U", "")
+        if env_val:
+            return f"MUSIC_U={env_val}"
         return ""
 
     def _netease_request(self, url: str, data: bytes | None = None,
