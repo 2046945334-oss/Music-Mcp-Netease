@@ -1690,10 +1690,28 @@ class MusicHandler(BaseHTTPRequestHandler):
                 if now - self.state._together_last_save > 60:
                     self._save_together_minutes()
                     self.state._together_last_save = now
+        song_id = str(body.get("songId") or "")
+        song_name = body.get("name") or ""
+        song_artist = body.get("artist") or ""
+        # Auto-resolve song name/artist from Netease if missing
+        if song_id and (not song_name or not song_artist):
+            # Reuse cached info from previous now_playing if same song
+            if prev and str(prev.get("songId")) == song_id and prev.get("name"):
+                song_name = song_name or prev.get("name", "")
+                song_artist = song_artist or prev.get("artist", "")
+            else:
+                try:
+                    d = self._netease_request(f"https://music.163.com/api/song/detail?ids=[{song_id}]")
+                    ds = (d.get("songs") or [{}])[0]
+                    song_name = song_name or ds.get("name", "")
+                    song_artist = song_artist or ", ".join(
+                        a.get("name", "") for a in (ds.get("artists") or ds.get("ar") or []) if a.get("name"))
+                except Exception:
+                    pass  # keep whatever we had
         self.state.now_playing = {
-            "songId": str(body.get("songId") or ""),
-            "name": body.get("name") or "",
-            "artist": body.get("artist") or "",
+            "songId": song_id,
+            "name": song_name,
+            "artist": song_artist,
             "position": float(body.get("position") or 0),
             "duration": float(body.get("duration") or 0),
             "playing": playing,
