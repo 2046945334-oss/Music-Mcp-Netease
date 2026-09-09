@@ -3641,13 +3641,24 @@ audio.addEventListener('play', () => beatNow());   // foreground: timer; backgro
 
 // ── Init ──
 
-// ── Parent postMessage control (dynamic island) ──
+// ── Parent postMessage control (dynamic island + AI tools) ──
 window.addEventListener('message', (e) => {
   if (!e.data || typeof e.data !== 'object') return;
   const cmd = e.data.musicCmd;
   if (cmd === 'togglePlay') togglePlay();
   else if (cmd === 'playNext') playNext();
   else if (cmd === 'playPrev') playPrev();
+  else if (cmd === 'pause') { audio.pause(); }
+  else if (cmd === 'play') { audio.play().catch(() => {}); }
+  else if (cmd === 'playSong' && e.data.songId) {
+    // AI tool sends songId to play
+    const sid = String(e.data.songId);
+    if (state.song && String(state.song.songId) === sid && audio.src) {
+      audio.play().catch(() => {});
+    } else {
+      loadAndPlay({ songId: sid, name: '', artist: '', album: '', cover: '' });
+    }
+  }
 });
 
 setupMediaSession();
