@@ -1954,7 +1954,10 @@ function renderApp() {
 
   // 抽屉形态没渲染顶栏，这两颗按钮不存在 —— 不判空的话整个 renderApp 断在这里，
   // 后面的 renderTab 全不执行，内容区一片空白（8-10 验收当场撞到过）。
-  document.getElementById('music-home-btn')?.addEventListener('click', returnHomeWithoutStopping);
+  document.getElementById('music-home-btn')?.addEventListener('click', e => {
+    if (isEmbedded) { e.preventDefault(); e.stopPropagation(); try { window.parent.postMessage({ type: 'music:back' }, '*'); } catch {} return; }
+    returnHomeWithoutStopping();
+  });
   document.getElementById('music-mini-btn')?.addEventListener('click', minimizeMusicWindow);
 
   // NP bar tap -> open lyrics
