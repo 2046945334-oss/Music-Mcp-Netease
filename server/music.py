@@ -441,6 +441,8 @@ class MusicHandler(BaseHTTPRequestHandler):
             self._handle_music_remote_get()
         elif path == "/music/remote/peek":
             self._handle_music_remote_peek()
+        elif path == "/music/heard":
+            self._handle_heard_get()
         elif path == "/music/now":
             self._handle_music_now_get()
         elif path == "/music/together-minutes":
@@ -490,6 +492,8 @@ class MusicHandler(BaseHTTPRequestHandler):
             self._handle_music_profile_update(body)
         elif path == "/music/remote":
             self._handle_music_remote_post(body)
+        elif path == "/music/heard":
+            self._handle_heard_post(body)
         elif path == "/music/now":
             self._handle_music_now_post(body)
         else:
@@ -1717,6 +1721,49 @@ class MusicHandler(BaseHTTPRequestHandler):
             "playing": playing,
             "at": now,
         }
+        self._send_json(200, {"ok": True})
+
+    # ── 他在听：池屿（islet 里的 AI）自己听歌时记下的；播放器「他在听」页只读展示 ──
+    def _heard_file(self):
+        return self.state.data_dir / "heard.json"
+
+    def _load_heard(self) -> list:
+        f = self._heard_file()
+        if f.exists():
+            try:
+                data = json.loads(f.read_text())
+                return data if isinstance(data, list) else []
+            except Exception:
+                return []
+        return []
+
+    def _handle_heard_get(self):
+        self._send_json(200, {"ok": True, "items": self._load_heard()[:100]})
+
+    def _handle_heard_post(self, body: dict):
+        sid = str(body.get("songId") or "").strip()
+        if not sid.isdigit():
+            self._send_json(400, {"error": "missing songId"})
+            return
+
+        def field(k, n):
+            return str(body.get(k) or "").strip()[:n]
+
+        if not field("line", 200) and not field("feel", 300):
+            self._send_json(400, {"error": "missing line or feel"})
+            return
+        cover = field("cover", 300)
+        try:
+            cover = self._ensure_cover(sid, cover) or cover
+        except Exception:
+            pass
+        item = {"songId": sid, "name": field("name", 80), "artist": field("artist", 80), "cover": cover,
+                "line": field("line", 200), "feel": field("feel", 300), "by": field("by", 20) or "ai",
+                "at": datetime.now(timezone.utc).isoformat()}
+        items = [item] + self._load_heard()
+        f = self._heard_file()
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(items[:100], ensure_ascii=False))
         self._send_json(200, {"ok": True})
 
     def _handle_music_now_get(self):
