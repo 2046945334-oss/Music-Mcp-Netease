@@ -427,6 +427,8 @@ body.embedded .ly-controls { padding: 6px 20px calc(var(--safe-bottom) + 10px); 
 .recent-row-info { flex: 1; min-width: 0; }
 .recent-row-name { font-size: 13.5px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .recent-row-artist { font-size: 11.5px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.his-line, .his-feel { font-size: 12px; line-height: 1.55; color: var(--ink-soft); margin-top: 4px; white-space: normal; word-break: break-word; }
+.his-feel { color: var(--ink); }
 
 /* ── Playlists Tab ── */
 .pls-tab { padding: 12px 16px 18px; }
@@ -1213,6 +1215,17 @@ window.TUTOOTH_MUSIC_VERSION = '2026-08-10.1';
 const isEmbedded = (() => {
   try { return window.self !== window.top; } catch { return true; }  // 跨域取不到 top 也算嵌着
 })();
+// 嵌在 islet（chishuishui.zeabur.app）里时，父页面和播放器不同源：
+// 发消息要写明父页面的源，收消息只认这几个源（其它网页嵌进来发的指令一律不理）
+const PARENT_ORIGINS = ['https://chishuishui.zeabur.app', 'https://chi.zeabur.app'];
+function parentOriginOk(o) {
+  return o === location.origin || PARENT_ORIGINS.includes(o) || /^https?:\/\/localhost(:\d+)?$/.test(o);
+}
+const PARENT_ORIGIN = (() => {
+  try { const a = location.ancestorOrigins && location.ancestorOrigins[0]; if (a && parentOriginOk(a)) return a; } catch {}
+  try { const r = document.referrer ? new URL(document.referrer).origin : ''; if (r && parentOriginOk(r)) return r; } catch {}
+  return location.origin;
+})();
 
 // ── Auth token (direct mode only) ──
 //    走反代时反代注入网关头，浏览器不存第二枚 token（TOKEN 为空，下面全是空操作）。
@@ -1309,7 +1322,7 @@ function songSnapshot() {
 function postSongToParent() {
   if (window.parent === window) return;      // 独立标签打开时没人要听,省了
   try {
-    window.parent.postMessage({ type: 'music:song', song: songSnapshot() }, location.origin);
+    window.parent.postMessage({ type: 'music:song', song: songSnapshot() }, PARENT_ORIGIN);
   } catch {}
 }
 /* ── Report the currently-sung lyric line to the parent page ──
@@ -1352,7 +1365,7 @@ async function postLyricNow() {
     next: pick(idx + 1),
     hasLyric: snap.lines.length > 0,
   };
-  try { window.parent.postMessage(payload, location.origin); } catch {}
+  try { window.parent.postMessage(payload, PARENT_ORIGIN); } catch {}
 }
 
 /* Long-press any lyric line to share it (with surrounding lines + translation):
@@ -1390,9 +1403,9 @@ function sendLyricChat() {
     prev: lyricPick(lyChatIdx - 1), line: lyricPick(lyChatIdx), next: lyricPick(lyChatIdx + 1),
     note, hasLyric: true,
   };
-  try { window.parent.postMessage(payload, location.origin); } catch {}
+  try { window.parent.postMessage(payload, PARENT_ORIGIN); } catch {}
   closeLyricChat();
-  showToast('递过去了 🎧');
+  showToast('递过去了');
 }
 document.addEventListener('click', (e) => {
   if (e.target.closest('#ly-chatline-send')) sendLyricChat();
@@ -1403,8 +1416,13 @@ document.addEventListener('keydown', (e) => {
 });
 
 window.addEventListener('message', (ev) => {
-  if (ev.origin !== location.origin) return;
+  if (!parentOriginOk(ev.origin)) return;
   const d = ev.data || {};
+  // islet 不再把 token 拼进 iframe 地址（会留在历史和日志里）：加载完用消息递过来，存好刷新一次
+  if (d.type === 'music:token' && typeof d.token === 'string' && d.token) {
+    try { if (localStorage.getItem('music-token') !== d.token) { localStorage.setItem('music-token', d.token); location.reload(); } } catch {}
+    return;
+  }
   if (d.type === 'music:ask') postSongToParent();
   if (d.type === 'music:lyric-now') postLyricNow();
   // 聊天页的歌曲卡片点「一起听」时打过来:直接放这首(2026-08-08)
@@ -1463,7 +1481,7 @@ audio.addEventListener('timeupdate', () => {
         window.parent.postMessage({
           type: 'music:tick', at: state.currentTime,
           duration: state.duration, playing: state.playing,
-        }, location.origin);
+        }, PARENT_ORIGIN);
       } catch {}
     }
   }
@@ -1858,7 +1876,7 @@ function coverBox(url, cls) {
 // ══════════════════════════════════════════
 
 // 抽屉里没有 Home tab，落地就落在「播放列表」；独立窗照旧从个人主页开始。
-let currentTab = 'home';
+let currentTab = 'playlists';   // Home 页去掉了
 let lyricsOpen = false;
 let memoryOpen = false;
 let playlistDetail = null; // playlist meta object or null
@@ -1904,11 +1922,8 @@ function renderApp() {
       </button>
     </div>`;
 
-  const homeNavHTML = `
-      <button class="nav-item${currentTab === 'home' ? ' active' : ''}" data-tab="home">
-        <svg viewBox="0 0 24 24" width="20" height="20"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-        <span>Home</span>
-      </button>`;
+  // Home（个人主页 / 签名）去掉了：这个播放器只用来听歌，落地就是歌单
+  const homeNavHTML = '';
 
   app.innerHTML = `
     ${topbarHTML}
@@ -1923,6 +1938,10 @@ function renderApp() {
       <button class="nav-item${currentTab === 'discover' ? ' active' : ''}" data-tab="discover">
         <svg viewBox="0 0 24 24" width="20" height="20"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <span>Discover</span>
+      </button>
+      <button class="nav-item${currentTab === 'his' ? ' active' : ''}" data-tab="his">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1v-6h3zM3 19a2 2 0 0 0 2 2h1v-6H3z"/></svg>
+        <span>他在听</span>
       </button>
       <span class="nav-ink" id="nav-ink" aria-hidden="true"></span>
     </nav>
@@ -2010,8 +2029,45 @@ function renderTab() {
   if (currentTab === 'home') renderHome(body);
   else if (currentTab === 'playlists') renderPlaylists(body);
   else if (currentTab === 'discover') renderDiscover(body);
+  else if (currentTab === 'his') renderHis(body);
 }
 
+// ── 他在听（只读）──
+// 池屿（islet 里的 AI）自己「听」一首歌后用 music_heard 记下的：哪首、哪句有感觉、他怎么想。
+// 存在服务器 data/heard.json，这里只展示，不能改不能删；点一行就放这首。
+let hisHeard = [];
+function heardWhen(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+async function renderHis(container) {
+  container.innerHTML = '<div class="pls-tab"><div class="spinner"></div></div>';
+  const d = await api('/music/heard').catch(() => ({}));
+  hisHeard = (d.ok && Array.isArray(d.items)) ? d.items : [];
+  const rows = hisHeard.map((h, i) => `
+      <div class="recent-row stagger-in his-row" data-hidx="${i}" style="--i:${Math.min(i, 12)}">
+        ${coverBox(h.cover, 'recent-row-cover')}
+        <div class="recent-row-info">
+          <div class="recent-row-name">${esc(h.name || ('song ' + h.songId))}</div>
+          <div class="recent-row-artist">${esc(h.artist || '')}${h.at ? ' · ' + esc(heardWhen(h.at)) : ''}</div>
+          ${h.line ? `<div class="his-line">「${esc(h.line)}」</div>` : ''}
+          ${h.feel ? `<div class="his-feel">${esc(h.feel)}</div>` : ''}
+        </div>
+      </div>`).join('');
+  container.innerHTML = `<div class="pls-tab">
+    <div class="pls-hd"><span class="pls-title">他在听</span></div>
+    <div class="section"><div class="section-hd">池屿自己听的歌 · 他记的，你只能看</div>
+      ${hisHeard.length ? `<div class="recent-list">${rows}</div>` : '<div class="empty-line">他还没自己听过歌</div>'}
+    </div></div>`;
+  container.querySelectorAll('.his-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const h = hisHeard[parseInt(row.dataset.hidx)];
+      if (h && h.songId) playSong({ songId: h.songId, name: h.name || '', artist: h.artist || '', album: '', cover: h.cover || '' });
+    });
+  });
+}
 // ── HOME TAB ──
 let homeProfile = null;
 let homeRecent = [];
@@ -2038,7 +2094,7 @@ async function renderHome(container) {
    它是「听」的功能不是「逛」的功能，所以裁掉个人主页时它得留下来。
    data-stagger 是入场编排的锚点，见 .stagger-in。 */
 function buildRecentSection() {
-  const title = isEmbedded ? '最近在听' : 'Recently Played';
+  const title = '最近在听';
   if (homeRecent.length === 0) {
     return `<div class="section"><div class="section-hd">${title}</div>
       <div class="empty-line">还没听过歌 — 去 Discover 挑一首</div></div>`;
@@ -2189,7 +2245,7 @@ async function renderPlaylists(container) {
   /* 抽屉里没有 Home tab，「最近在听」就得在这儿落脚，顺手把 recent 一起取了。 */
   const [d, recentRes, nd] = await Promise.all([
     api('/music/playlists').catch(() => ({})),
-    isEmbedded ? api('/music/recent').catch(() => ({})) : Promise.resolve(null),
+    api('/music/recent').catch(() => ({})),
     api('/music/netease/playlists').catch(() => ({}))
   ]);
   if (d.ok) playlists = d.playlists || [];
@@ -2243,7 +2299,7 @@ async function renderPlaylists(container) {
   }
 
   // Playlists section first; recent-played moves below.
-  html += '</div>' + (isEmbedded ? buildRecentSection() : '') + '</div>';
+  html += '</div>' + buildRecentSection() + '</div>';
   container.innerHTML = html;
 
   // 抽屉里「最近在听」也挂在这一页，点了就放
@@ -3649,6 +3705,7 @@ audio.addEventListener('play', () => beatNow());   // foreground: timer; backgro
 // ── Parent postMessage control (dynamic island + AI tools) ──
 window.addEventListener('message', (e) => {
   if (!e.data || typeof e.data !== 'object') return;
+  if (!parentOriginOk(e.origin)) return;
   const cmd = e.data.musicCmd;
   if (cmd === 'togglePlay') togglePlay();
   else if (cmd === 'playNext') playNext();
