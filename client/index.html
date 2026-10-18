@@ -1215,11 +1215,17 @@ window.TUTOOTH_MUSIC_VERSION = '2026-08-10.1';
 const isEmbedded = (() => {
   try { return window.self !== window.top; } catch { return true; }  // 跨域取不到 top 也算嵌着
 })();
-// 嵌在 islet（chishuishui.zeabur.app）里时，父页面和播放器不同源：
+// 嵌在 islet 里时，父页面和播放器不同源：
 // 发消息要写明父页面的源，收消息只认这几个源（其它网页嵌进来发的指令一律不理）
-const PARENT_ORIGINS = ['https://chishuishui.zeabur.app', 'https://chi.zeabur.app'];
+// 2026-10-18 搬到新服务器：islet 在 pool.43.160.210.148.sslip.io，之后换 chichishui.com
+const PARENT_ORIGINS = [
+  'https://pool.43.160.210.148.sslip.io',
+  'https://chishuishui.zeabur.app', 'https://chi.zeabur.app',
+];
 function parentOriginOk(o) {
-  return o === location.origin || PARENT_ORIGINS.includes(o) || /^https?:\/\/localhost(:\d+)?$/.test(o);
+  return o === location.origin || PARENT_ORIGINS.includes(o)
+    || /^https:\/\/([a-z0-9-]+\.)*chichishui\.com$/.test(o)
+    || /^https?:\/\/localhost(:\d+)?$/.test(o);
 }
 const PARENT_ORIGIN = (() => {
   try { const a = location.ancestorOrigins && location.ancestorOrigins[0]; if (a && parentOriginOk(a)) return a; } catch {}
