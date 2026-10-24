@@ -1548,9 +1548,11 @@ class MusicHandler(BaseHTTPRequestHandler):
         cache_dir.mkdir(parents=True, exist_ok=True)
         result_file = cache_dir / f"{song_id}_preanalysis.json"
         marker_file = cache_dir / f"{song_id}.analyzing"
-        if result_file.exists():
+        # 3.0 之前的结果没有听感曲线（curve），重新分析一次
+        if result_file.exists() and not self._analysis_stale(result_file):
             self._send_json(200, {"ok": True, "status": "ready"})
             return
+        result_file.unlink(missing_ok=True)
         if marker_file.exists():
             age = time.time() - marker_file.stat().st_mtime
             if age < 60:
@@ -1562,6 +1564,7 @@ class MusicHandler(BaseHTTPRequestHandler):
             if not self._fetch_music_url(song_id):
                 self._send_json(400, {"error": "cannot fetch audio"})
                 return
+        (cache_dir / f"{song_id}_analyze_error.txt").unlink(missing_ok=True)
         marker_file.write_text(json.dumps({
             "songId": song_id, "name": song_name, "started": time.time()
         }))
@@ -1574,6 +1577,12 @@ class MusicHandler(BaseHTTPRequestHandler):
         )
         self._send_json(200, {"ok": True, "status": "started"})
 
+    @staticmethod
+    def _analysis_stale(result_file) -> bool:
+        try:
+            return int(json.loads(result_file.read_text()).get("version") or 0) < 3
+        except Exception:
+            return True
     def _handle_analyze_status(self):
         qs = parse_qs(urlparse(self.path).query)
         song_id = qs.get("id", [""])[0]
