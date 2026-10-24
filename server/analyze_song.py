@@ -107,12 +107,29 @@ def main():
                 "maxEnergy": round(float(seg.max()), 4),
             })
 
+        # ── 3.0 (2026-10-24):每 5 秒一格的「听感曲线」,给 islet 的 music_listen 对歌词用 ──
+        # e = 这 5 秒的响度(相对全曲最响那格,0~1);v = 人声频段(300~3400Hz)占比,高 = 人声 / 主旋律在前面;
+        # d = 这 5 秒的鼓点密度(每秒几个起音)
+        step = 5.0
+        fps = sr / hop
+        per = max(1, int(round(step * fps)))
+        vband = (freqs >= 300) & (freqs < 3400)
+        ev = E[:, vband].sum(axis=1) / (E.sum(axis=1) + 1e-9)
+        on = np.zeros(len(rms))
+        on[[t for t in onsets if t < len(on)]] = 1
+        curve = []
+        for i in range(0, len(rms), per):
+            curve.append([float(rms[i:i + per].mean()), float(ev[i:i + per].mean()), float(on[i:i + per].sum() / step)])
+        top = max(c[0] for c in curve) or 1e-9
+        curve = [{"t": round(i * step, 1), "e": round(c[0] / top, 2), "v": round(c[1], 2), "d": round(c[2], 1)} for i, c in enumerate(curve)]
+
         result = {
+            "version": 3,
             "songId": song_id, "name": song_name, "artist": song_artist,
             "duration": round(duration, 1), "bpm": round(float(bpm)),
             "key": dominant_key, "rms": round(float(np.sqrt((y ** 2).mean())), 3),
             "onsetRate": round(float(onset_rate), 2), "bands": bands,
-            "segments": segments,
+            "segments": segments, "curve": curve,
         }
         result_file.write_text(json.dumps(result, ensure_ascii=False, indent=1))
         marker_file.unlink(missing_ok=True)
