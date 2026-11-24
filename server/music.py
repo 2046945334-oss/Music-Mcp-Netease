@@ -54,6 +54,16 @@ import urllib.error
 
 HERE = Path(__file__).resolve().parent
 
+def _qr_cred_path() -> Path:
+    return HERE / "data" / "netease_cred"
+def _save_qr_cred(music_u: str) -> None:
+    p = _qr_cred_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(music_u.strip())
+    os.chmod(tmp, 0o600)
+    tmp.replace(p)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
@@ -207,6 +217,14 @@ class MusicHandler(BaseHTTPRequestHandler):
     # ── Netease helpers ──
 
     def _netease_cookie(self) -> str:
+        # 扫码登录存的那份在持久盘上（server/data 挂了卷，重新部署也在），优先用
+        qr = _qr_cred_path()
+        try:
+            v = qr.read_text().strip()
+            if v:
+                return f"MUSIC_U={v}"
+        except OSError:
+            pass
         cred = HERE / ".netease_cred"
         try:
             for line in cred.read_text().splitlines():
@@ -415,6 +433,12 @@ class MusicHandler(BaseHTTPRequestHandler):
             self._handle_netease_likes_get()
         elif path == "/music/netease/record":
             self._handle_netease_record()
+        elif path == "/music/netease/qr/key":
+            self._handle_netease_qr_key()
+        elif path == "/music/netease/qr/check":
+            self._handle_netease_qr_check()
+        elif path == "/music/netease/login-status":
+            self._handle_netease_login_status()
         elif path == "/music/netease/profile":
             self._handle_netease_profile()
         elif path == "/music/playlist":
@@ -1345,6 +1369,60 @@ class MusicHandler(BaseHTTPRequestHandler):
         self._send_json(200, {"ok": True, "type": rtype, "songs": out})
 
 
+    # ── 扫码登录（她 2026-11-24 要的：cookie 过期不用再手动贴） ──
+    #    网易云的扫码接口走不加密的 /api/：unikey → 二维码内容 https://music.163.com/login?codekey=… →
+    #    轮询 client/login：800 过期 / 801 等扫码 / 802 已扫待确认 / 803 成功（Set-Cookie 里带 MUSIC_U）
+    def _qr_post(self, url: str, form: dict) -> tuple[dict, str]:
+        data = urlencode(form).encode()
+        req = urllib.request.Request(url, data=data, headers={
+            "Referer": "https://music.163.com",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "Content-Type": "application/x-www-form-urlencoded",
+        })
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            cookies = "; ".join(resp.headers.get_all("Set-Cookie") or [])
+            return json.loads(resp.read()), cookies
+    def _handle_netease_qr_key(self):
+        try:
+            d, _ = self._qr_post("https://music.163.com/api/login/qrcode/unikey", {"type": "1"})
+        except Exception:
+            self._send_json(502, {"error": "拿不到二维码，网易云没响应"})
+            return
+        key = d.get("unikey")
+        if d.get("code") != 200 or not key:
+            self._send_json(502, {"error": "拿不到二维码（%s）" % d.get("code")})
+            return
+        self._send_json(200, {"ok": True, "key": key, "url": f"https://music.163.com/login?codekey={key}"})
+    def _handle_netease_qr_check(self):
+        key = parse_qs(urlparse(self.path).query).get("key", [""])[0]
+        if not key or len(key) > 80:
+            self._send_json(400, {"error": "缺 key"})
+            return
+        try:
+            d, cookies = self._qr_post("https://music.163.com/api/login/qrcode/client/login", {"key": key, "type": "1"})
+        except Exception:
+            self._send_json(502, {"error": "查不到扫码状态"})
+            return
+        code = d.get("code")
+        out = {"ok": True, "code": code, "message": d.get("message", ""), "nickname": d.get("nickname", "")}
+        if code == 803:
+            m = re.search(r"MUSIC_U=([^;]+)", cookies)
+            if not m:
+                self._send_json(502, {"error": "扫码成功了但没拿到 cookie，再扫一次试试"})
+                return
+            _save_qr_cred(m.group(1))
+            logger.info("Netease cookie updated via QR login")
+        self._send_json(200, out)
+    def _handle_netease_login_status(self):
+        src = "qr" if _qr_cred_path().exists() and _qr_cred_path().read_text().strip() else ("file" if (HERE / ".netease_cred").exists() else ("env" if os.environ.get("MUSIC_U") else "none"))
+        try:
+            acc = self._netease_request("https://music.163.com/api/nuser/account/get")
+        except Exception:
+            self._send_json(200, {"ok": True, "loggedIn": False, "source": src, "error": "网易云没响应"})
+            return
+        prof = acc.get("profile") or {}
+        self._send_json(200, {"ok": True, "loggedIn": bool(prof.get("userId")), "source": src,
+                              "nickname": prof.get("nickname", ""), "avatar": prof.get("avatarUrl", "")})
     def _handle_netease_profile(self):
         """账号档案：昵称、听歌量、等级、入网天数，只读。"""
         try:
