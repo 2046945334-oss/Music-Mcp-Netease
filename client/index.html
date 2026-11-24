@@ -992,6 +992,21 @@ body.window-mini .np-eyebrow { display: none; }
   display: flex; flex-direction: column;
   background: linear-gradient(168deg, #fff1f5 0%, #fff8ec 55%, #ffeff2 100%);
 }
+/* 网易云账号一行 + 扫码弹层 */
+.ne-acct { display: flex; align-items: center; gap: 8px; margin: 4px 0 12px; padding: 9px 12px; border-radius: 14px;
+  background: rgba(255,255,255,.55); border: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+.ne-acct .ne-dot { width: 7px; height: 7px; border-radius: 50%; background: #d9a3ae; flex: none; }
+.ne-acct.on .ne-dot { background: #8cc7a1; }
+.ne-acct.on { color: var(--ink); }
+.ne-acct .ne-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ne-btn { border: 1px solid var(--line); background: rgba(255,255,255,.8); color: var(--accent); border-radius: 999px;
+  padding: 5px 12px; font-size: 12px; cursor: pointer; flex: none; }
+.ne-qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; padding-top: 18px; }
+.ne-qr { width: 216px; height: 216px; padding: 10px; border-radius: 18px; background: #fff; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 18px rgba(107,74,85,.12); transition: opacity .2s; }
+.ne-qr svg { width: 100%; height: 100%; display: block; }
+.ne-qr.dim { opacity: .3; }
+.ne-qr-tip { font-size: 13px; color: var(--ink); text-align: center; min-height: 1.4em; }
 .memory-view.hidden { display: none; }
 .sm-header {
   display: flex; align-items: center; gap: 10px; padding: 16px 20px;
@@ -1956,7 +1971,8 @@ function renderApp() {
     <div class="memory-view hidden" id="comments-view"></div>
     <div class="memory-view hidden" id="queue-view"></div>
     <div class="mv-view hidden" id="mv-view"></div>
-    <div class="memory-view hidden" id="addlist-view"></div>`;
+    <div class="memory-view hidden" id="addlist-view"></div>
+    <div class="memory-view hidden" id="login-view"></div>`;
 
   // Nav tabs
   document.getElementById('bottom-nav').addEventListener('click', e => {
@@ -2240,6 +2256,71 @@ let plCreating = false;
 
 let neteaseLists = [];   // read-only mirror of the account's NetEase playlists
 
+// ── 网易云扫码登录（2026-11-24）：cookie 过期了在这里扫一下，服务端存到持久盘，不用再手动贴 MUSIC_U ──
+let neQrTimer = null, neQrKey = '';
+async function refreshNeteaseAcct() {
+  const box = document.getElementById('ne-acct');
+  if (!box) return;
+  document.getElementById('ne-login-btn')?.addEventListener('click', openNeteaseLogin);
+  try {
+    const d = await api('/music/netease/login-status');
+    box.classList.toggle('on', !!d.loggedIn);
+    box.querySelector('.ne-name').textContent = d.loggedIn ? ('网易云 · ' + (d.nickname || '已登录')) : '网易云没登录 / cookie 过期了';
+    box.querySelector('.ne-btn').textContent = d.loggedIn ? '换号 / 重新扫码' : '扫码登录';
+  } catch { box.querySelector('.ne-name').textContent = '网易云状态查不到'; }
+}
+function loadQrLib() {
+  if (window.QRCodeLib) return Promise.resolve(window.QRCodeLib);
+  return new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = 'qrcode.min.js'; sc.onload = () => ok(window.QRCodeLib); sc.onerror = no; document.head.appendChild(sc); });
+}
+function closeNeteaseLogin() {
+  clearTimeout(neQrTimer); neQrTimer = null; neQrKey = '';
+  document.getElementById('login-view')?.classList.add('hidden');
+}
+async function openNeteaseLogin() {
+  const v = document.getElementById('login-view');
+  if (!v) return;
+  v.classList.remove('hidden');
+  v.innerHTML = `<div class="sm-header"><button class="sm-close" id="lg-close">&times;</button><span class="sm-header-title">网易云扫码登录</span></div>
+    <div class="sm-body"><div class="ne-qr-wrap"><div class="ne-qr" id="ne-qr"><div class="spinner"></div></div>
+    <div class="ne-qr-tip" id="ne-qr-tip">打开网易云音乐 App，用扫一扫扫这个码</div>
+    <button class="ne-btn" id="ne-qr-refresh" style="display:none">换一张</button></div></div>`;
+  document.getElementById('lg-close').addEventListener('click', closeNeteaseLogin);
+  document.getElementById('ne-qr-refresh').addEventListener('click', newNeteaseQr);
+  newNeteaseQr();
+}
+async function newNeteaseQr() {
+  clearTimeout(neQrTimer);
+  const qr = document.getElementById('ne-qr'), tip = document.getElementById('ne-qr-tip'), rf = document.getElementById('ne-qr-refresh');
+  if (!qr) return;
+  rf.style.display = 'none'; qr.classList.remove('dim'); qr.innerHTML = '<div class="spinner"></div>';
+  tip.textContent = '打开网易云音乐 App，用扫一扫扫这个码';
+  try {
+    const [d, lib] = await Promise.all([api('/music/netease/qr/key'), loadQrLib()]);
+    neQrKey = d.key;
+    qr.innerHTML = await lib.toSvg(d.url);
+    pollNeteaseQr(d.key);
+  } catch (e) { qr.innerHTML = ''; tip.textContent = '二维码拿不到：' + (e.message || '网络不通'); rf.style.display = ''; }
+}
+async function pollNeteaseQr(key) {
+  if (key !== neQrKey) return;
+  const qr = document.getElementById('ne-qr'), tip = document.getElementById('ne-qr-tip'), rf = document.getElementById('ne-qr-refresh');
+  if (!qr) return;
+  let d = null;
+  try { d = await api('/music/netease/qr/check?key=' + encodeURIComponent(key)); } catch (e) { tip.textContent = '查状态出错了，稍后自动再试'; }
+  if (key !== neQrKey) return;
+  if (d && d.code === 803) {
+    tip.textContent = '登好了' + (d.nickname ? '：' + d.nickname : '');
+    showToast('网易云登录好了');
+    setTimeout(() => { closeNeteaseLogin(); if (currentTab === 'playlists') renderTab(); }, 900);
+    return;
+  }
+  if (d && d.code === 800) { qr.classList.add('dim'); tip.textContent = '二维码过期了'; rf.style.display = ''; return; }
+  if (d && d.code === 802) tip.textContent = '扫到了，在手机上点「确认登录」';
+  else if (d && d.code && d.code !== 801) tip.textContent = (d.message || ('网易云返回 ' + d.code)) + '，可以换一张再试';
+  neQrTimer = setTimeout(() => pollNeteaseQr(key), 2000);
+}
+
 async function renderPlaylists(container) {
   if (playlistDetail) {
     renderPlaylistDetail(container);
@@ -2258,6 +2339,7 @@ async function renderPlaylists(container) {
   if (recentRes && recentRes.ok) homeRecent = recentRes.songs || [];
 
   let html = `<div class="pls-tab">
+    <div class="ne-acct" id="ne-acct"><span class="ne-dot"></span><span class="ne-name">网易云账号…</span><button class="ne-btn" id="ne-login-btn">扫码登录</button></div>
     <div class="pls-hd">
       <span class="pls-title">${isEmbedded ? '歌单' : 'Playlists'}</span>
       <button class="pls-add" id="pls-add-btn">+</button>
@@ -2307,6 +2389,7 @@ async function renderPlaylists(container) {
   // Playlists section first; recent-played moves below.
   html += '</div>' + buildRecentSection() + '</div>';
   container.innerHTML = html;
+  refreshNeteaseAcct();
 
   // 抽屉里「最近在听」也挂在这一页，点了就放
   container.querySelectorAll('.recent-row').forEach(row => {
